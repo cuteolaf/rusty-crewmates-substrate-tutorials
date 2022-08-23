@@ -1,4 +1,4 @@
 [workspace]
-members = ['exercises/*/*']
+members = ['exercises/ex04-marketplace/tightly-coupled-marketplace/']
 [profile.release]
 panic = 'unwind'

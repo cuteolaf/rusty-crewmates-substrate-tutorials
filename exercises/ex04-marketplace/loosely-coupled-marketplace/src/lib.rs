@@ -9,7 +9,7 @@ pub mod types;
 use frame_support::{
 	ensure,
 	sp_runtime::traits::{CheckedConversion, CheckedMul},
-	traits::{Currency, ExistenceRequirement::KeepAlive},
+	traits::Currency,
 };
 // use support::Sellable;
 use types::*;
@@ -22,7 +22,7 @@ pub type BalanceOf<T> =
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::pallet_prelude::*;
+	use frame_support::{pallet_prelude::*, traits::ExistenceRequirement};
 	use frame_system::{ensure_signed, pallet_prelude::*};
 
 	#[pallet::config]
@@ -85,9 +85,7 @@ pub mod pallet {
 			let origin = ensure_signed(origin)?;
 
 			ensure!(amount > 0, Error::<T>::ZeroAmount);
-			let owned: u128 = todo!(
-				"get the amount of this specific NFT owned by the seller, through the Resource type and its Sellable trait"
-			);
+			let owned: u128 = <T as Config>::Resource::amount_owned(nft_id, origin.clone());
 			ensure!(owned >= amount, Error::<T>::NotEnoughOwned);
 
 			ResourcesForSale::<T>::insert(nft_id, origin.clone(), SaleData { price, amount });
@@ -107,9 +105,7 @@ pub mod pallet {
 			let buyer = ensure_signed(origin)?;
 
 			let sale_data = ResourcesForSale::<T>::get(nft_id, seller.clone());
-			let owned = todo!(
-				"get the amount of this specific NFT owned by the seller, through the Resource type and its Sellable trait"
-			);
+			let owned = <T as Config>::Resource::amount_owned(nft_id, seller.clone());
 
 			ensure!(amount <= sale_data.amount, Error::<T>::NotEnoughInSale);
 			ensure!(sale_data.amount <= owned, Error::<T>::NotEnoughOwned);
@@ -119,9 +115,14 @@ pub mod pallet {
 				.checked_mul(&amount.checked_into().ok_or(Error::<T>::Overflow)?)
 				.ok_or(Error::<T>::Overflow)?;
 
-			todo!("transfer the amount of currency owed from the buyer to the seller");
+			<<T as Config>::Currency>::transfer(
+				&buyer,
+				&seller,
+				total_to_pay,
+				ExistenceRequirement::AllowDeath,
+			)?;
 
-			todo!("transfer amount of nft_id from the seller to the buyer");
+			<T as Config>::Resource::transfer(nft_id, seller.clone(), buyer.clone(), amount);
 
 			if amount == sale_data.amount {
 				ResourcesForSale::<T>::remove(nft_id, seller.clone());
