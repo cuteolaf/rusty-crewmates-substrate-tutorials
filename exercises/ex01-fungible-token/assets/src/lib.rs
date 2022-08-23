@@ -146,7 +146,20 @@ pub mod pallet {
 			// TODO:
 			// - Create a new AssetMetadata instance based on the call arguments.
 			// - Insert this metadata in the Metadata storage, under the asset_id key.
+			Metadata::<T>::insert(
+				asset_id,
+				AssetMetadata {
+					name: name.clone(),
+					symbol: symbol.clone(),
+				},
+			);
 			// - Deposit a `MetadataSet` event.
+
+			Self::deposit_event(Event::<T>::MetadataSet {
+				asset_id,
+				name,
+				symbol,
+			});
 
 			Ok(())
 		}
@@ -160,16 +173,22 @@ pub mod pallet {
 		) -> DispatchResult {
 			// TODO:
 			// - Ensure the extrinsic origin is a signed transaction.
+			let caller = ensure_signed(origin)?;
 			// - Ensure the caller is the asset owner.
 
 			let mut minted_amount = 0;
+			let mut total_supply = 0;
 
 			Asset::<T>::try_mutate(asset_id, |maybe_details| -> DispatchResult {
 				let details = maybe_details.as_mut().ok_or(Error::<T>::UnknownAssetId)?;
 
+				ensure!(details.owner == caller, Error::<T>::NoPermission);
+
 				let old_supply = details.supply;
 				details.supply = details.supply.saturating_add(amount);
 				minted_amount = details.supply - old_supply;
+
+				total_supply = details.supply;
 
 				Ok(())
 			})?;
@@ -177,9 +196,12 @@ pub mod pallet {
 			Account::<T>::mutate(asset_id, to.clone(), |balance| {
 				*balance += minted_amount;
 			});
-
 			// TODO: Deposit a `Minted` event.
-
+			Self::deposit_event(Event::<T>::Minted {
+				asset_id,
+				owner: to,
+				total_supply,
+			});
 			Ok(())
 		}
 
@@ -187,10 +209,38 @@ pub mod pallet {
 		pub fn burn(origin: OriginFor<T>, asset_id: AssetId, amount: u128) -> DispatchResult {
 			// TODO:
 			// - Ensure the extrinsic origin is a signed transaction.
-			// - Mutate the total supply.
-			// - Mutate the account balance.
-			// - Emit a `Burned` event.
+			let caller = ensure_signed(origin)?;
 
+			ensure!(
+				Asset::<T>::contains_key(asset_id),
+				Error::<T>::UnknownAssetId
+			);
+
+			// - Mutate the account balance.
+			let mut burnt_amount = 0;
+			Account::<T>::mutate(asset_id, caller.clone(), |balance| {
+				let old_balance = *balance;
+				*balance = old_balance.saturating_sub(amount);
+				burnt_amount = old_balance - *balance;
+			});
+
+			// - Mutate the total supply.
+			let mut total_supply = 0;
+
+			Asset::<T>::try_mutate(asset_id, |maybe_details| -> DispatchResult {
+				let details = maybe_details.as_mut().ok_or(Error::<T>::UnknownAssetId)?;
+				details.supply = details.supply.saturating_sub(burnt_amount);
+
+				total_supply = details.supply;
+
+				Ok(())
+			})?;
+			// - Emit a `Burned` event.
+			Self::deposit_event(Event::<T>::Burned {
+				asset_id,
+				owner: caller,
+				total_supply,
+			});
 			Ok(())
 		}
 
@@ -203,8 +253,35 @@ pub mod pallet {
 		) -> DispatchResult {
 			// TODO:
 			// - Ensure the extrinsic origin is a signed transaction.
+			let from = ensure_signed(origin)?;
 			// - Mutate both account balances.
+			let mut transferred = 0;
+
+			ensure!(
+				Asset::<T>::contains_key(asset_id) == true,
+				Error::<T>::UnknownAssetId
+			);
+
+			Account::<T>::mutate(asset_id, from.clone(), |balance| {
+				let old_balance = *balance;
+				*balance = old_balance.saturating_sub(amount);
+				transferred = old_balance - *balance;
+			});
+
+			Account::<T>::mutate(asset_id, to.clone(), |balance| {
+				let old_balance = *balance;
+				*balance = old_balance.saturating_add(transferred);
+				transferred = *balance - old_balance;
+			});
+
 			// - Emit a `Transferred` event.
+
+			Self::deposit_event(Event::<T>::Transferred {
+				asset_id,
+				from,
+				to,
+				amount: transferred,
+			});
 
 			Ok(())
 		}
