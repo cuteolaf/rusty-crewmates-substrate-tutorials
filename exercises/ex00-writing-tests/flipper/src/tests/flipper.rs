@@ -1,6 +1,6 @@
 use super::mock::*;
-use crate::{pallet, Error};
-use frame_support::{assert_noop, assert_ok};
+use crate::Error;
+use frame_support::{assert_err, assert_ok};
 
 #[test]
 fn set_value_ok() {
@@ -12,17 +12,30 @@ fn set_value_ok() {
 
 #[test]
 fn set_value_err_already_set() {
-	new_test_ext().execute_with(|| todo!("Verify if the function returns the expected error."));
+	new_test_ext().execute_with(|| {
+		assert_ok!(Flipper::set_value(Origin::signed(ALICE), false));
+		assert_err!(
+			Flipper::set_value(Origin::signed(ALICE), true),
+			Error::<TestRuntime>::AlreadySet
+		);
+	});
 }
 
 #[test]
 fn flip_value_ok() {
-	new_test_ext()
-		.execute_with(|| todo!("Ensure the good behaviour of the flip_value() function."));
+	new_test_ext().execute_with(|| {
+		assert_ok!(Flipper::set_value(Origin::signed(ALICE), true));
+		assert_ok!(Flipper::flip_value(Origin::signed(ALICE)));
+		assert_eq!(Flipper::value(), Some(false));
+	});
 }
 
 #[test]
 fn flip_value_ko() {
-	new_test_ext()
-		.execute_with(|| todo!("write a scenario that triggers an error in flip_value()"));
+	new_test_ext().execute_with(|| {
+		assert_err!(
+			Flipper::flip_value(Origin::signed(ALICE)),
+			Error::<TestRuntime>::NoneValue
+		);
+	});
 }
